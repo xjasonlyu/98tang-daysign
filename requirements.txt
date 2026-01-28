@@ -2,6 +2,3 @@ lxml
 uncurl
 httpx[http2]
 beautifulsoup4
-pillow
-opencv-python
-numpy
