@@ -1,13 +1,14 @@
 import os
 import re
+import json
 import time
-import uuid
 import httpx
 import traceback
 import random
 from contextlib import contextmanager
 from bs4 import BeautifulSoup
 from xml.etree import ElementTree as ET
+from captcha import resolve_captcha, CaptchaError
 from flaresolverr import FlareSolverrHTTPClient
 
 SEHUATANG_HOST = 'www.sehuatang.net'
@@ -69,8 +70,7 @@ def daysign(
 ) -> bool:
 
     with (FlareSolverrHTTPClient(url=flaresolverr_url,
-                                 session_id=uuid.uuid4().hex,
-                                 proxy=flaresolverr_proxy,
+                                 proxy_url=flaresolverr_proxy,
                                  cookies=cookies,
                                  http2=True)
           if flaresolverr_url else httpx.Client(cookies=cookies, http2=True)) as client:
@@ -80,7 +80,6 @@ def daysign(
             r = client.request(method=method, url=url,
                                headers={
                                    'user-agent': DEFAULT_USER_AGENT,
-                                   'x-requested-with': 'XMLHttpRequest',
                                    'dnt': '1',
                                    'accept': '*/*',
                                    'sec-ch-ua-mobile': '?0',
@@ -88,7 +87,7 @@ def daysign(
                                    'sec-fetch-site': 'same-origin',
                                    'sec-fetch-mode': 'cors',
                                    'sec-fetch-dest': 'empty',
-                                   'referer': f'https://{SEHUATANG_HOST}/plugin.php?id=dd_sign&mod=sign',
+                                   'referer': f'https://{SEHUATANG_HOST}/plugin.php?id=dd_sign',
                                    'accept-language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
                                }, *args, **kwargs)
             try:
@@ -141,12 +140,13 @@ def daysign(
                               'usesig': '',
                               'subject': '',
             }) as r:
-                print(f'comment to: tid = {tid}, message = {message}')
+                print(f'commented to: tid = {tid}, message = {message}')
                 # print(r.text)
 
             time.sleep(random.randint(16, 20))
 
-        with _request(method='get', url=f'https://{SEHUATANG_HOST}/plugin.php?id=dd_sign&mod=sign') as r:
+        # access the day sign page, but do nothing
+        with _request(method='get', url=f'https://{SEHUATANG_HOST}/plugin.php?id=dd_sign') as r:
             # id_hash_rsl = re.findall(
             #     r"updatesecqaa\('(.*?)'", r.text, re.MULTILINE | re.IGNORECASE)
             # id_hash = id_hash_rsl[0] if id_hash_rsl else 'qS0'  # default value
@@ -157,39 +157,68 @@ def daysign(
             # action = soup.find('form', {'name': 'login'})['action']
             pass
 
-        with _request(method='get', url=f'https://{SEHUATANG_HOST}/plugin.php?id=dd_sign&ac=sign&infloat=yes&handlekey=pc_click_ddsign&inajax=1&ajaxtarget=fwin_content_pc_click_ddsign') as r:
-            soup = BeautifulSoup(r.text, 'xml')
-            html = soup.find('root').string
-            # extract argument values from signform
-            root = BeautifulSoup(html, 'html.parser')
-            id_hash = (root.find('span', id=re.compile(r'^secqaa_'))
-                       ['id']).removeprefix('secqaa_')
-            formhash = root.find('input', {'name': 'formhash'})['value']
-            signtoken = root.find('input', {'name': 'signtoken'})['value']
-            action = root.find('form', {'name': 'login'})['action']
-            print(
-                f'signform values: id_hash={id_hash}, formhash={formhash}, signtoken={signtoken}')
-            print(f'action href: {action}')
+        def _decode_json_from_resp(r):
+            try:
+                data = r.json()
+            except json.decoder.JSONDecodeError:
+                # print(f"try parse and load JSON: {r.text}")
+                soup = BeautifulSoup(r.text, "html.parser")
+                body_text = soup.body.get_text(strip=True)
+                data = json.loads(body_text)
+            return data
 
-        # GET: https://www.sehuatang.net/misc.php?mod=secqaa&action=update&idhash=qS0&0.2010053552105764
-        with _request(method='get', url=f'https://{SEHUATANG_HOST}/misc.php?mod=secqaa&action=update&idhash={id_hash}&{round(random.random(), 16)}') as r:
-            qes_rsl = re.findall(r"'(.*?) = \?'", r.text,
-                                 re.MULTILINE | re.IGNORECASE)
+        def _load_captcha():
+            time.sleep(random.randint(5, 8))  # rate limit on captcha loading
+            with _request(method='get', url=f'https://{SEHUATANG_HOST}/misc.php?mod=captcha') as r:
+                captcha = _decode_json_from_resp(r)
+                return captcha
 
-            if not qes_rsl or not qes_rsl[0]:
-                raise Exception('invalid or empty question!')
-            qes = qes_rsl[0]
-            ans = eval(qes)
-            print(f'verification question: {qes} = {ans}')
-            assert type(ans) == int
+        def _submit_captcha(value: str):
+            time.sleep(random.randint(2, 3))
+            with _request(method='post', url=f'https://{SEHUATANG_HOST}/misc.php?mod=captcha&action=check', data=value) as r:
+                data = _decode_json_from_resp(r)
+                return data
 
-        # POST: https://www.sehuatang.net/plugin.php?id=dd_sign&mod=sign&signsubmit=yes&signhash=LMAB9&inajax=1
-        with _request(method='post', url=f'https://{SEHUATANG_HOST}/{action.lstrip("/")}&inajax=1',
-                      data={'formhash': formhash,
-                            'signtoken': signtoken,
-                            'secqaahash': id_hash,
-                            'secanswer': ans}) as r:
-            return r.text
+        def _do_sign():
+            time.sleep(random.randint(0, 1))
+            with _request(method='get', url=f'https://{SEHUATANG_HOST}/plugin.php?id=dd_sign&ac=sign_v2') as r:
+                captcha = _decode_json_from_resp(r)
+                return captcha
+
+        maxRetries = 6
+        for retry in range(maxRetries):
+            captcha = _load_captcha()
+
+            # save captcha data for debugging
+            # with open("captcha_debug.json", "+w") as f:
+            #     json.dump(captcha, f)
+
+            try:
+                print(
+                    f'try #{retry} captcha solving: type={captcha["data"]["type"]}')
+            except:
+                print(f'load captcha error: {captcha}')
+                return  # stop retrying
+
+            try:
+                ans = resolve_captcha(captcha)
+                print(f"resolved answer: {ans}")
+                data = _submit_captcha(ans)
+                print(f'submitted answer: {data}')
+                match data.get("data"):
+                    case "ok":
+                        data = _do_sign()
+                        print(f'daysign requested: {data}')
+                        return data
+                    case "failure":
+                        # failed, maybe try again
+                        print(f'captcha resolving failed, try again')
+                        continue
+            except CaptchaError as e:
+                print(f"captcha error: {e}")
+                continue
+
+            return  # stop retrying
 
 
 def retrieve_cookies_from_curl(env: str) -> dict:
@@ -252,7 +281,7 @@ def push_notification(title: str, content: str) -> None:
 
 def main():
 
-    raw_html = None
+    results = None
     cookies = {}
 
     if os.getenv('FETCH_98TANG'):
@@ -261,24 +290,22 @@ def main():
         cookies = retrieve_cookies_from_curl('CURL_98TANG')
 
     try:
-        raw_html = daysign(
+        results = daysign(
             cookies=cookies,
             flaresolverr_url=os.getenv('FLARESOLVERR_URL'),
             flaresolverr_proxy=os.getenv('FLARESOLVERR_PROXY'),
         )
 
-        if '签到成功' in raw_html:
-            title, message_text = '98堂 每日签到', re.findall(
-                r"'(签到成功.+?)'", raw_html, re.MULTILINE)[0]
-        elif '已经签到' in raw_html:
-            title, message_text = '98堂 每日签到', re.findall(
-                r"'(已经签到.+?)'", raw_html, re.MULTILINE)[0]
-        elif '需要先登录' in raw_html:
+        message = results['message']
+
+        if '签到成功' in message:
+            title, message_text = '98堂 每日签到', message
+        elif '重复签到' in message:
+            title, message_text = '98堂 每日签到', message
+        elif '需要先登录' in message:
             title, message_text = '98堂 签到异常', f'Cookie无效或已过期，请重新获取'
         else:
-            title, message_text = '98堂 签到异常', raw_html
-    except IndexError:
-        title, message_text = '98堂 签到异常', f'正则匹配错误'
+            title, message_text = '98堂 签到异常', message
     except Exception as e:
         title, message_text = '98堂 签到异常', f'错误原因：{e}'
         # log detailed error message
