@@ -190,8 +190,8 @@ def daysign(
                 captcha = _decode_json_from_resp(r)
                 return captcha
 
-        maxRetries = 6
-        for retry in range(maxRetries):
+        captcha_retry_cnt = 6
+        for retry in range(captcha_retry_cnt):
 
             # loading captcha
             captcha = _load_captcha()
