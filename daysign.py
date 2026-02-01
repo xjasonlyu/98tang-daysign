@@ -42,7 +42,8 @@ AUTO_REPLIES = (
     '感謝分享',
     '分享支持。',
     '这谁顶得住啊',
-    '这是要精J人亡啊！',
+    '感谢制作',
+    '喜欢看这种',
     '饰演很赞',
     '這系列真有戲',
     '感谢大佬分享',
@@ -116,7 +117,11 @@ def daysign(
         with _request(method='get', url=f'https://{SEHUATANG_HOST}/forum.php?mod=forumdisplay&fid={FID}') as r:
             tids = re.findall(r"normalthread_(\d+)", r.text,
                               re.MULTILINE | re.IGNORECASE)
-            print(f'all tids found: {tids}')
+            if not tids:
+                print("failed to parse TIDs from html content:")
+                print(r.text)  # debug html
+            else:
+                print(f'all tids found: {tids}')
 
         # Post comments to forums
         for _ in range(int(REPLY_TIMES)):
@@ -187,6 +192,8 @@ def daysign(
 
         maxRetries = 6
         for retry in range(maxRetries):
+
+            # loading captcha
             captcha = _load_captcha()
 
             # save captcha data for debugging
@@ -219,6 +226,8 @@ def daysign(
                 continue
 
             return  # stop retrying
+        else:
+            raise Exception("maximum captcha retries reached")
 
 
 def retrieve_cookies_from_curl(env: str) -> dict:
