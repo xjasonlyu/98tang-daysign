@@ -134,6 +134,29 @@ def daysign(
                 formhash = soup.find('input', {'name': 'formhash'})['value']
                 print(f'formhash found for tid={tid}: {formhash}')
 
+                try:
+                    post = soup.find("div", id="postlist").find(
+                        "div", id=re.compile(r"^post_\d+$"))
+                    pid = post["id"].split("_")[1]
+                    post_msg = post.find("td", id=f"postmessage_{pid}")
+
+                    content = post_msg.get_text(strip=True)
+                    if re.search("(钓鱼|封号|釣魚|封號)", content, re.IGNORECASE | re.MULTILINE):
+                        raise Exception(f"keyword matched, skip")
+
+                    magnet = post_msg.find("div", id=re.compile(
+                        r"^code_\w+$")).get_text(strip=True)
+                    if isinstance(magnet, str) and magnet.startswith("magnet:?"):
+                        print(f"magnet parsed from tid={tid}: {magnet}")
+                    else:
+                        raise Exception("magnet not found")
+
+                except Exception as e:
+                    print(f"parse magnet from tid={tid}: {e}")
+                    # retry other replies
+                    time.sleep(random.randint(16, 20))
+                    continue
+
             message = random.choice(AUTO_REPLIES)
 
             with _request(method='post', url=f'https://{SEHUATANG_HOST}/forum.php?mod=post&action=reply&fid={FID}&tid={tid}&extra=page%3D1&replysubmit=yes&infloat=yes&handlekey=fastpost&inajax=1',
