@@ -38,7 +38,6 @@ AUTO_REPLIES = (
     '赏心悦目',
     '快乐无限~~',
     '這怎麼受的了啊',
-    '谁也挡不住！',
     '感謝分享',
     '分享支持。',
     '这谁顶得住啊',
@@ -127,7 +126,7 @@ def daysign(
         for _ in range(int(REPLY_TIMES)):
 
             tid = random.choice(tids)
-            print(f'choose tid = {tid} to comment')
+            print(f'choose tid={tid} to comment')
 
             with _request(method='get', url=f'https://{SEHUATANG_HOST}/forum.php?mod=viewthread&tid={tid}&extra=page%3D1') as r:
                 soup = BeautifulSoup(r.text, 'html.parser')
@@ -147,12 +146,12 @@ def daysign(
                     magnet = post_msg.find("div", id=re.compile(
                         r"^code_\w+$")).get_text(strip=True)
                     if isinstance(magnet, str) and magnet.startswith("magnet:?"):
-                        print(f"magnet parsed from tid={tid}: {magnet}")
+                        print(f"magnet parsed for tid={tid}: {magnet}")
                     else:
                         raise Exception("magnet not found")
 
                 except Exception as e:
-                    print(f"parse magnet from tid={tid}: {e}")
+                    print(f"parse magnet for tid={tid}: {e}")
                     # retry other replies
                     time.sleep(random.randint(16, 20))
                     continue
@@ -168,7 +167,7 @@ def daysign(
                               'usesig': '',
                               'subject': '',
             }) as r:
-                print(f'commented to: tid = {tid}, message = {message}')
+                print(f'commented to tid={tid}: {message}')
                 # print(r.text)
 
             time.sleep(random.randint(16, 20))
