@@ -1,6 +1,6 @@
 services:
   flaresolverr-mitm-proxy:
-    image: xjasonlyu/flaresolverr-mitm-proxy:latest
+    image: ghcr.io/zelak312/flaresolverr-mitm-proxy:latest
     container_name: flaresolverr-mitm-proxy
     # environment:
     #   - PROXY=http://localhost:9090
