@@ -113,14 +113,21 @@ def daysign(
             raise Exception('failed to pass age confirmation')
 
         # find TIDs from the given FID
-        with _request(method='get', url=f'https://{SEHUATANG_HOST}/forum.php?mod=forumdisplay&fid={FID}') as r:
-            tids = re.findall(r"normalthread_(\d+)", r.text,
-                              re.MULTILINE | re.IGNORECASE)
-            if not tids:
-                print("failed to parse TIDs from html content:")
-                print(r.text)  # debug html
-            else:
+        fetch_tid_retry_cnt = 3
+        for i in range(fetch_tid_retry_cnt):
+            with _request(method='get', url=f'https://{SEHUATANG_HOST}/forum.php?mod=forumdisplay&fid={FID}') as r:
+                tids = re.findall(r"normalthread_(\d+)", r.text,
+                                  re.MULTILINE | re.IGNORECASE)
+                if not tids:
+                    print("failed to parse TIDs from html content:")
+                    print(r.text)  # debug html
+
+                    # simple exponential backoff
+                    time.sleep(30*(2**i)+random.randint(16, 20))
+                    continue
+
                 print(f'all tids found: {tids}')
+                break
 
         # Post comments to forums
         for _ in range(int(REPLY_TIMES)):
